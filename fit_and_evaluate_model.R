@@ -11,7 +11,7 @@ fit_and_evaluate_model <- function(folded_data_recipe_xgbmatrix,
                  ~xgb.cv(
                    params = xgb_params,
                    data = .x,
-                   nround = 200,
+                   nround = 2000,
                    nfold = 5,
                    showsd = TRUE,
                    early_stopping_round = 10
@@ -65,6 +65,12 @@ fit_and_evaluate_model <- function(folded_data_recipe_xgbmatrix,
   write_rds(model_metrics, paste0("output/",model_name, "_model_metrics.rds"))
   write_csv(model_metrics %>% select(model_name, test_rmse, test_gini, mean_xgcv_best_iteration), paste0("output/",model_name, "_model_metrics.csv"))
   # WE have gone through all this to estimate out of fold performance using our whole data set as a "test" dataset.
+  
+  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[1]], fname=paste0("output/", model_name, "_fold1_xgmodel.xgb"))
+  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[2]], fname=paste0("output/", model_name, "_fold2_xgmodel.xgb"))
+  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[3]], fname=paste0("output/", model_name, "_fold3_xgmodel.xgb"))
+  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[4]], fname=paste0("output/", model_name, "_fold4_xgmodel.xgb"))
+  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[5]], fname=paste0("output/", model_name, "_fold5_xgmodel.xgb"))
   
  return(model_metrics) 
 }

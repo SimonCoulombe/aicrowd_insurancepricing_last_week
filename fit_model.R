@@ -61,12 +61,45 @@ fit_model <- function(x_raw= NULL,
         .data[0, ]
       ) %>%
       recipes::step_mutate(
-        age_when_licensed = drv_age1 - drv_age_lic1,
+        light_slow = if_else(vh_weight < 400 & vh_speed<130, 1, 0, NA_real_),
+        light_fast = if_else(vh_weight < 400 & vh_speed>200, 1, 0, NA_real_),
+        town_id = paste(population, 10*town_surface_area, sep = "_"),
+        age_when_licensed =  drv_age1  - drv_age_lic1 ,
+        pop_density = population / town_surface_area,
+        young_man_drv1 = as.integer((drv_age1 <=24 & drv_sex1 == "M")),
+        fast_young_man_drv1 = as.integer((drv_age1 <=30 & drv_sex1 == "M" & vh_speed >=200)),
+        young_man_drv2 = as.integer((drv_age2 <=24 & drv_sex2 == "M")),
+        #no_known_claim_values = as.integer(pol_no_claims_discount %in% no_known_claim_values),
+        year = if_else(year <= 4, year, 4),  # replace year 5 with a 4.
+        #year = as_factor(year),
+        vh_current_value = vh_value * 0.8^(vh_age -1),  #depreciate 20% per year
+        vh_time_left = pmax(20 - vh_age,0),
+        pol_coverage_int = case_when(
+          pol_coverage == "Min" ~ 1,
+          pol_coverage == "Med1" ~ 2,
+          pol_coverage == "Med2" ~ 3,
+          pol_coverage == "Max" ~4),
+        pol_pay_freq_int = case_when(
+          pol_pay_freq == "Monthly" ~ 1,
+          pol_pay_freq == "Quarterly" ~ 2,
+          pol_pay_freq == "Biannual" ~ 3,
+          pol_pay_freq == "Yearly" ~ 4
+        )
       ) %>%
       recipes::step_string2factor(recipes::all_nominal()) %>%
-      recipes::step_other(recipes::all_nominal(), threshold = 0.05) %>% ##  categories with less than 5% of total are grouped in the "other" group
-      recipes::step_dummy(all_nominal(), one_hot = TRUE) %>% # one-hot encode categories
-      step_rm(contains("id_policy")) # remove ID
+      # 2 way interact
+      recipes::step_interact(~ pol_coverage_int:vh_current_value) %>%
+      recipes::step_interact(~ pol_coverage_int:vh_time_left) %>%
+      recipes::step_interact(~ pol_coverage_int:pol_no_claims_discount) %>%
+      recipes::step_interact(~ vh_current_value:vh_time_left) %>%  
+      recipes::step_interact(~ vh_current_value:pol_no_claims_discount) %>%
+      recipes::step_interact(~ vh_time_left:pol_no_claims_discount) %>%
+      # 3 way intertac 
+      recipes::step_interact(~ pol_coverage_int:vh_current_value:vh_age) %>%
+      # remove id
+      step_rm(contains("id_policy")) %>% 
+      recipes::step_other(recipes::all_nominal(), threshold = 0.005) %>%
+      recipes::step_dummy(all_nominal(), one_hot = TRUE)
     
     prepped_first_recipe <- recipes::prep(my_first_recipe, .data, retain = FALSE)
     
@@ -80,7 +113,7 @@ fit_model <- function(x_raw= NULL,
       trained_recipe =  map(train, ~train_my_recipe( .x)),
       baked_train = map2(train, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
       baked_test = map2(test, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
-      feature_names =  map(baked_train, ~ .x %>% select(-claim_amount, -year) %>% colnames())
+      feature_names =  map(baked_train, ~ .x %>% select(-claim_amount, -year) %>% colnames()) # drop year
     )
   
   folded_data_recipe_xgbmatrix <-
@@ -133,7 +166,7 @@ fit_model <- function(x_raw= NULL,
   set.seed(42)
   gamma <-            data.frame(gamma =c(rep(0,how_many_models/4), runif(3*how_many_models/4)*10)) # 0 à 20
   eta <-              data.frame(eta =c(rep(0.1,how_many_models))) # 0 à 10
-  nrounds <-              data.frame(nrounds =c(rep(200,how_many_models))) # 0 à 10
+  nrounds <-              data.frame(nrounds =c(rep(3000,how_many_models))) # 0 à 10
   max_depth <-        data.frame(max_depth = floor(runif(how_many_models)*11 ) + 3)  # 1 à 10
   min_child_weight <- data.frame(min_child_weight = floor(runif(how_many_models) * 100) + 1) # 1 à 100
   subsample <-        data.frame(subsample =runif(how_many_models) * 0.8 + 0.2) # 0.2 à 1
@@ -263,7 +296,7 @@ fit_model <- function(x_raw= NULL,
   xgcv <- xgb.cv(
     params = best_xgb_params,
     data = xgtrain,
-    nround = 200,
+    nround = 4000,
     nfold = 5,
     showsd = TRUE,
     early_stopping_round = 10
