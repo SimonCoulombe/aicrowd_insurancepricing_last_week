@@ -2,31 +2,7 @@ fit_and_evaluate_model <- function(folded_data_recipe_xgbmatrix,
                       model_name,
                      xgb_params
                       ) {
-  
-  folded_data_recipe_xgbmatrix <-
-    folded_data_recipe %>% 
-    mutate(
-      xgtrain = 
-        pmap(
-          list(baked_train,  feature_names),
-          function(.data, .features){
-            xgtrain <- xgb.DMatrix(
-              as.matrix(.data %>% select(all_of(.features))),
-              label = .data %>% pull(claim_amount)
-            )
-          }
-        ),
-      xgtest = 
-        pmap(
-          list(baked_test,  feature_names),
-          function(.data, .features){
-            xgtrain <- xgb.DMatrix(
-              as.matrix(.data %>% select(all_of(.features))),
-              label = .data %>% pull(claim_amount)
-            )
-          }
-        )
-    )
+  set.seed(42)
   
   folded_data_recipe_xgbmatrix_xgbcv <-
     folded_data_recipe_xgbmatrix %>%
@@ -82,7 +58,8 @@ fit_and_evaluate_model <- function(folded_data_recipe_xgbmatrix,
       xgcv_best_iterations = list(folded_data_recipe_xgbmatrix_xgbcv_metrics$xgcv_best_iteration),  
       test_rmses = list(folded_data_recipe_xgbmatrix_xgbcv_metrics$test_rmse),
       test_ginis = list(folded_data_recipe_xgbmatrix_xgbcv_metrics$test_gini),
-      params = list(xgb_params)
+      params = list(xgb_params),
+      estimate = list(test_w_preds$estimate)
       
     )
   write_rds(model_metrics, paste0("output/",model_name, "_model_metrics.rds"))
