@@ -20,3 +20,7 @@ I also used the "recipes" package, which insure that  you won't create extra dum
 I purposefully set the hyperparameters to something absolutely stupid.  I also didnt do any clever feature engineering.  
 
 TO USE: run fit_model() on the training data to generate trained_model.xgb, then zip the whole folder and upload as a submission
+
+
+fit_model() will search for the best hyperparameters by calling the fit_and_evaluate_model() function for many model hyperparameters. the fit_and_evaluate_model uses 100% of the data as a test set to better estimate model performance.
+once this search is complete, we will finally fit_most_promising_model() and call it a day!

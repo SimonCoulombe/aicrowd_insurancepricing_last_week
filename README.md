@@ -23,3 +23,9 @@ also didnt do any clever feature engineering.
 
 TO USE: run fit\_model() on the training data to generate
 trained\_model.xgb, then zip the whole folder and upload as a submission
+
+fit\_model() will search for the best hyperparameters by calling the
+fit\_and\_evaluate\_model() function for many model hyperparameters. the
+fit\_and\_evaluate\_model uses 100% of the data as a test set to better
+estimate model performance. once this search is complete, we will
+finally fit\_most\_promising\_model() and call it a day!
