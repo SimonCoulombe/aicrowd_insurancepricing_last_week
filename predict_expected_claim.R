@@ -19,15 +19,11 @@ predict_expected_claim <- function(model, x_raw) {
   # avg_claims: a one-dimensional array of the same length as X_raw, with one
   #     average claim per contract (in same order). These average claims must be POSITIVE (>0).
 
-  feature_names <- read_rds("feature_names.rds")
-  ajustement <- read_rds("ajusts.rds")
-
   xgmatrix <- xgb.DMatrix(
     as.matrix(x_raw %>% select(all_of(feature_names)))
   )
 
-
-  y_predict <- predict(model, newdata = xgmatrix) * ajustement # tweak this to work with your model
+  y_predict <- predict(model, newdata = xgmatrix) 
 
   return(y_predict)
 }

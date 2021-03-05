@@ -10,18 +10,21 @@ source("predict_expected_claim.R")
 source("predict_premium.R")
 source("preprocess_X_data.R")
 
-model_output_path <- "trained_model.xgb"
-feature_names <- read_rds("feature_names.rds")
-ajustement <- read_rds("ajusts.rds")
+model_output_path <- "prod/trained_model.xgb"
+feature_names <- read_rds("prod/feature_names.rds")
+ajust_cars <- read_csv("prod/ajust_cars.csv")
+ajust_city <- read_csv("prod/ajust_city.csv")
+ajust_noclaim <- read_csv("prod/ajust_noclaim.csv")
+noclaim_list <- read_csv("prod/noclaim_list.csv")
+
+
 # This script expects sys.args arguments for (1) the dataset and (2) the output file.
 output_dir = Sys.getenv('OUTPUTS_DIR', '.')
 input_dataset = Sys.getenv('DATASET_PATH', 'training_data.csv')  # The default value.
 output_claims_file = paste(output_dir, 'claims.csv', sep = '/')  # The file where the expected claims should be saved.
 output_prices_file = paste(output_dir, 'prices.csv', sep = '/')  # The file where the prices should be saved.
-model_output_path = 'trained_model.xgb'
 
-feature_names <- read_rds("feature_names.rds")
-ajustement <- read_rds("ajusts.rds")
+
 if(!(interactive())){
   args = commandArgs(trailingOnly=TRUE)
   
@@ -36,7 +39,17 @@ if(!(interactive())){
   }
 } else message("not interactive")
 
-Xraw <- read_csv(input_dataset) # load the data
+Xraw <- read_csv(input_dataset)  %>% 
+   select(-claim_amount) %>% 
+  mutate(year=5)  %>% 
+  mutate(vh_make_model = "prout") %>%   #, population = 12, town_surface_area = 13) %>% 
+  left_join(noclaim_list) %>% 
+  left_join(ajust_noclaim) %>% 
+  left_join(ajust_cars) %>%
+  mutate(town_id = paste(population, 10*town_surface_area, sep = "_")) %>% 
+  left_join(ajust_city) %>% # load the data
+  replace_na(list(applied_car_ratio = 1.5, applied_town_id_ratio = 1.5, ajust_noclaim = max(ajust_noclaim$ajust_noclaim)))
+
 x_clean <- preprocess_X_data(Xraw) # clean the data
 trained_model <- load_model(model_output_path) # load the model
 
