@@ -1,13 +1,25 @@
-# aicrowd_insurancepricing_starterpack
+AICrowd insurance pricing competition last week submission
+================
+Simon Coulombe
+Marc 6th 2021
 
-A starterpack for the insurance pricing competition at https://www.aicrowd.com/challenges/insurance-pricing-game
+# aicrowd\_insurancepricing\_starterpack
 
-It uses the {recipes} package to prepare the data, ensuring that you will always have the same features at the end.
+A starterpack for the insurance pricing competition at
+<https://www.aicrowd.com/challenges/insurance-pricing-game>
 
-I used a "tweedie" model, might be new for some folks.  It allows you to model claim amount directly and  is an alternative to using a frequency + a severity model 
+It uses the {recipes} package to prepare the data, ensuring that you
+will always have the same features at the end.
 
-I also used the "recipes" package, which insure that  you won't create extra dummy variables by mistake. 
+I used a “tweedie” model, might be new for some folks. It allows you to
+model claim amount directly and is an alternative to using a frequency +
+a severity model
 
-I purposefully set the hyperparameters to something absolutely stupid.  I also didnt do any clever feature engineering.  
+I also used the “recipes” package, which insure that you won’t create
+extra dummy variables by mistake.
 
-TO USE: run fit_model() on the training data to generate trained_model.xgb, then zip the whole folder and upload as a submission
+I purposefully set the hyperparameters to something absolutely stupid. I
+also didnt do any clever feature engineering.
+
+TO USE: run fit\_model() on the training data to generate
+trained\_model.xgb, then zip the whole folder and upload as a submission
