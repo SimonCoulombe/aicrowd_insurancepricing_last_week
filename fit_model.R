@@ -54,7 +54,7 @@ fit_model <- function(x_raw= NULL,
     # folds <- policynumbers[sample(nrow(policynumbers)),] %>%  # randomize policynumber order, then assign  folds according to row number
     #   mutate(fold = row_number() %% 5 +1) 
     # write_csv(folds, "output/folds.csv")
-    read_csv("output/folds.csv")
+    folds <- read_csv("output/folds.csv")
   }
   set.seed(42)
   # each folds gives me a train and a test  
