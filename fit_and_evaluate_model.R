@@ -1,7 +1,10 @@
 fit_and_evaluate_model <- function(folded_data_recipe_xgbmatrix,
                       model_name,
-                     xgb_params
+                     xgb_params,
+                     max_rounds = 2000
                       ) {
+  
+  submodel_start_time <- format(Sys.time(), "%Y%m%d_%H%M%S")
   set.seed(42)
   
   folded_data_recipe_xgbmatrix_xgbcv <-
@@ -11,10 +14,10 @@ fit_and_evaluate_model <- function(folded_data_recipe_xgbmatrix,
                  ~xgb.cv(
                    params = xgb_params,
                    data = .x,
-                   nround = 2000,
+                   nround = max_rounds,
                    nfold = 5,
                    showsd = TRUE,
-                   early_stopping_round = 10
+                   early_stopping_round = 50
                  )
       ),
       xgcv_best_test_rmse_mean = map_dbl(xgcv, ~ .x$evaluation_log$test_rmse_mean[.x$best_iteration]),
@@ -62,15 +65,15 @@ fit_and_evaluate_model <- function(folded_data_recipe_xgbmatrix,
       estimate = list(test_w_preds$estimate)
       
     )
-  write_rds(model_metrics, paste0("output/",model_name, "_model_metrics.rds"))
-  write_csv(model_metrics %>% select(model_name, test_rmse, test_gini, mean_xgcv_best_iteration), paste0("output/",model_name, "_model_metrics.csv"))
+  write_rds(model_metrics, paste0("output/",model_name, submodel_start_time,"_model_metrics.rds"))
+  write_csv(model_metrics %>% select(model_name, test_rmse, test_gini, mean_xgcv_best_iteration), paste0("output/",model_name, submodel_start_time,"_model_metrics.csv"))
   # WE have gone through all this to estimate out of fold performance using our whole data set as a "test" dataset.
   
-  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[1]], fname=paste0("output/", model_name, "_fold1_xgmodel.xgb"))
-  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[2]], fname=paste0("output/", model_name, "_fold2_xgmodel.xgb"))
-  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[3]], fname=paste0("output/", model_name, "_fold3_xgmodel.xgb"))
-  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[4]], fname=paste0("output/", model_name, "_fold4_xgmodel.xgb"))
-  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[5]], fname=paste0("output/", model_name, "_fold5_xgmodel.xgb"))
+  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[1]], fname=paste0("output/", model_name,submodel_start_time, "_fold1_xgmodel.xgb"))
+  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[2]], fname=paste0("output/", model_name,submodel_start_time, "_fold2_xgmodel.xgb"))
+  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[3]], fname=paste0("output/", model_name,submodel_start_time, "_fold3_xgmodel.xgb"))
+  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[4]], fname=paste0("output/", model_name,submodel_start_time, "_fold4_xgmodel.xgb"))
+  xgb.save(folded_data_recipe_xgbmatrix_xgbcv$xgmodel[[5]], fname=paste0("output/", model_name,submodel_start_time, "_fold5_xgmodel.xgb"))
   
  return(model_metrics) 
 }
