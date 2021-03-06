@@ -44,7 +44,7 @@ Xraw <- read_csv(input_dataset)  %>%
   #mutate(year=5)  %>% 
   #mutate(vh_make_model = "prout") %>%   #, population = 12, town_surface_area = 13) %>% 
   left_join(n_claim_list) %>% 
-  left_join(ajust_n_claim) %>% 
+  left_join(ajust_n_claim %>% select(n_claims, ajust_n_claim)) %>% 
   left_join(ajust_cars) %>%
   mutate(town_id = paste(population, 10*town_surface_area, sep = "_")) %>% 
   left_join(ajust_city) %>% # load the data
