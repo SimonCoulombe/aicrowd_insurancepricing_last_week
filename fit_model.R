@@ -2,10 +2,10 @@ fit_model <- function(x_raw= NULL,
                       y_raw = NULL,
                       folds = NULL) {
   
-  random_rounds <- 15
-  bayesian_rounds <-15
+  random_rounds    <- 5
+  bayesian_rounds  <- 5
   max_xgbcv_rounds <- 2000
-  start_time <- format(Sys.time(), "%Y_%m_%d_%Hh%Mm%Ss")
+  start_time       <- format(Sys.time(), "%Y_%m_%d_%Hh%Mm%Ss")
   # Model training function: given training data (X_raw, y_raw), train this pricing model.
   
   # Parameters
@@ -34,8 +34,9 @@ fit_model <- function(x_raw= NULL,
     training <- bind_cols(x_raw, y_raw)
   } 
   training <- training %>% 
-    mutate(claim_amount_backup = claim_amount,
-           claim_amount = pmin(claim_amount, 10000)) # cap à 10 000$
+    mutate(
+      claim_amount_backup = claim_amount,
+      claim_amount = pmin(claim_amount, 10000)) # cap à 10 000$
   # We are going to set up a system that allows us to use 100% of the training set for training and testing.  
   # This is important because we don'T have that much data, so keeping only 20% of that is likely to be volatile.  
   
@@ -59,36 +60,36 @@ fit_model <- function(x_raw= NULL,
   
   ## define recipe, train it for all folds  ----
   
-  train_my_recipe <- function(.data){
+  train_my_recipe   <- function(.data){
     my_first_recipe <-
       recipes::recipe(
         claim_amount ~ .,
         .data[0, ]
       ) %>%
       recipes::step_mutate(
-        light_slow = if_else(vh_weight < 400 & vh_speed<130, 1, 0, NA_real_),
-        light_fast = if_else(vh_weight < 400 & vh_speed>200, 1, 0, NA_real_),
-        town_id = paste(population, 10*town_surface_area, sep = "_"),
-        age_when_licensed =  drv_age1  - drv_age_lic1 ,
-        pop_density = population / town_surface_area,
-        young_man_drv1 = as.integer((drv_age1 <=24 & drv_sex1 == "M")),
-        fast_young_man_drv1 = as.integer((drv_age1 <=30 & drv_sex1 == "M" & vh_speed >=200)),
-        young_man_drv2 = as.integer((drv_age2 <=24 & drv_sex2 == "M")),
+        light_slow             = if_else(vh_weight < 400 & vh_speed<130, 1, 0, NA_real_),
+        light_fast             = if_else(vh_weight < 400 & vh_speed>200, 1, 0, NA_real_),
+        town_id                = paste(population, 10*town_surface_area, sep = "_"),
+        age_when_licensed      =  drv_age1  - drv_age_lic1 ,
+        pop_density            = population / town_surface_area,
+        young_man_drv1         = as.integer((drv_age1 <=24 & drv_sex1 == "M")),
+        fast_young_man_drv1    = as.integer((drv_age1 <=30 & drv_sex1 == "M" & vh_speed >=200)),
+        young_man_drv2         = as.integer((drv_age2 <=24 & drv_sex2 == "M")),
         #no_known_claim_values = as.integer(pol_no_claims_discount %in% no_known_claim_values),
-        year = if_else(year <= 4, year, 4),  # replace year 5 with a 4.
-        #year = as_factor(year),
-        vh_current_value = vh_value * 0.8^(vh_age -1),  #depreciate 20% per year
-        vh_time_left = pmax(20 - vh_age,0),
-        pol_coverage_int = case_when(
-          pol_coverage == "Min" ~ 1,
-          pol_coverage == "Med1" ~ 2,
-          pol_coverage == "Med2" ~ 3,
-          pol_coverage == "Max" ~4),
-        pol_pay_freq_int = case_when(
-          pol_pay_freq == "Monthly" ~ 1,
-          pol_pay_freq == "Quarterly" ~ 2,
-          pol_pay_freq == "Biannual" ~ 3,
-          pol_pay_freq == "Yearly" ~ 4
+        year                   = if_else(year <= 4, year, 4),  # replace year 5 with a 4.
+        #year                  = as_factor(year),
+        vh_current_value       = vh_value * 0.8^(vh_age -1),  #depreciate 20% per year
+        vh_time_left           = pmax(20 - vh_age,0),
+        pol_coverage_int       = case_when(
+          pol_coverage         == "Min" ~ 1,
+          pol_coverage         == "Med1" ~ 2,
+          pol_coverage         == "Med2" ~ 3,
+          pol_coverage         == "Max" ~4),
+        pol_pay_freq_int       = case_when(
+          pol_pay_freq         == "Monthly" ~ 1,
+          pol_pay_freq         == "Quarterly" ~ 2,
+          pol_pay_freq         == "Biannual" ~ 3,
+          pol_pay_freq         == "Yearly" ~ 4
         )
       ) %>%
       recipes::step_other(recipes::all_nominal(), threshold = 0.005)  %>% 
@@ -118,10 +119,12 @@ fit_model <- function(x_raw= NULL,
   folded_data_recipe <-
     folded_data %>%
     mutate(
-      trained_recipe =  map(train, ~train_my_recipe( .x)),
-      baked_train = map2(train, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
-      baked_test = map2(test, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
-      feature_names =  map(baked_train, ~ .x %>% select(-claim_amount, -year, -claim_amount_backup) %>% colnames()) # drop year
+      trained_recipe = map(train, ~train_my_recipe( .x)),
+      baked_train    = map2(train, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
+      baked_test     = map2(test, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
+      feature_names  = map(baked_train, ~ .x %>% 
+                             select(-claim_amount, -year, -claim_amount_backup) %>% 
+                             colnames()) # drop year
     )
   
   folded_data_recipe_xgbmatrix <-
@@ -167,9 +170,9 @@ fit_model <- function(x_raw= NULL,
   #     colsample_bytree = 0.6,
   #     tree_method = "hist")
   # )
-  
   # 
-  
+  # 
+  if(FALSE){
   best_xgb_params <- list(
     booster = "gbtree",
     objective = "reg:tweedie",
@@ -177,234 +180,253 @@ fit_model <- function(x_raw= NULL,
     tweedie_variance_power = 1.66,
     gamma = 4,
     max_depth = 4,
-    eta = 0.03,
+    eta = 0.01,
     min_child_weight = 10,
     subsample = 0.6,
-    colsample_bytree = 0.6,
+    colsample_bytree = 0.4,
     tree_method = "hist")
-  
+    
+    
+    # best_xgb_params <- list(
+    #   booster = "gbtree",
+    #   objective = "reg:tweedie",
+    #   eval_metric = "rmse",
+    #   tweedie_variance_power = 1.66,
+    #   gamma = 0,
+    #   max_depth = 3,
+    #   eta = 0.02,
+    #   min_child_weight = 10,
+    #   subsample = 0.4,
+    #   colsample_bytree = 0.4,
+    #   tree_method = "hist")
+  }
   # B - find the most promising model with  random grid  ----
+  if(FALSE){
   # 
   # # I love these parameters and I always want to have them around.  
-  # simon_params <- data.frame(
-  #   #booster = "gbtree",
-  #   #objective = "reg:tweedie",
-  #   #eval_metric = "rmse",
-  #   #tweedie_variance_power = 1.66,
-  #   gamma = 10,
-  #   max_depth = 3,
-  #   eta = 0.03,
-  #   min_child_weight = 25,
-  #   subsample = 0.6,
-  #   colsample_bytree = 0.3,
-  #   nrounds = 3000
-  #   #tree_method = tree_method
-  # ) %>% 
-  #   as_tibble()
-  # 
-  # 
-  # # generate 20 random models parameter sets
-  # how_many_models <- 4
-  # set.seed(42)
-  # gamma <-            data.frame(gamma =c(rep(0,how_many_models/4), runif(3*how_many_models/4)*10)) # 0 à 20
-  # eta <-              data.frame(eta =c(rep(0.1,how_many_models))) # 0 à 10
-  # nrounds <-              data.frame(nrounds =c(rep(3000,how_many_models))) # 0 à 10
-  # max_depth <-        data.frame(max_depth = floor(runif(how_many_models)*11 ) + 3)  # 1 à 10
-  # min_child_weight <- data.frame(min_child_weight = floor(runif(how_many_models) * 100) + 1) # 1 à 100
-  # subsample <-        data.frame(subsample =runif(how_many_models) * 0.8 + 0.2) # 0.2 à 1
-  # colsample_bytree <- data.frame(colsample_bytree =runif(how_many_models) * 0.8 + 0.2)  # 0.2 à 1
-  # random_grid <-gamma %>%
-  #   bind_cols(eta ) %>%
-  #   bind_cols(nrounds ) %>%
-  #   bind_cols(max_depth ) %>%
-  #   bind_cols(min_child_weight) %>%
-  #   bind_cols(subsample) %>%
-  #   bind_cols(colsample_bytree )   %>%
-  #   as_tibble()
-  # # combine random and hardcoded parameters
-  # df.params <- simon_params %>%  bind_rows(random_grid) %>%
-  #   mutate(rownum = row_number(),
-  #          rownumber = row_number())
-  # list_of_param_sets <- df.params %>% 
-  #   group_nest(rownum)  %>% 
-  #   mutate(xgb_params = map(data, 
-  #                           ~  list(
-  #                             booster = "gbtree",
-  #                             eta = .x$eta,
-  #                             max_depth = .x$max_depth,
-  #                             min_child_weight = .x$min_child_weight,
-  #                             gamma = .x$gamma,
-  #                             subsample = .x$subsample,
-  #                             colsample_bytree = .x$colsample_bytree,
-  #                             objective = 'reg:tweedie', 
-  #                             eval_metric = "rmse",
-  #                             tweedie_variance_power = 1.66,
-  #                             tree_method = tree_method
-  #                           )
-  #   )
-  #   )
-  # 
-  # 
-  # # the get_random_grid_results tells us which parameter set has the best out-of-fold performance 
-  # get_random_grid_results <- function(list_of_param_sets){
-  #   
-  #   random_grid_results <- list_of_param_sets %>% 
-  #     mutate(booster = map2(data, xgb_params, function(X, Y){
-  #       message(paste0("model #",       X$rownumber,
-  #                      " eta = ",              X$eta,
-  #                      " max.depth = ",        X$max_depth,
-  #                      " min_child_weigth = ", X$min_child_weight,
-  #                      " subsample = ",        X$subsample,
-  #                      " colsample_bytree = ", X$colsample_bytree,
-  #                      " gamma = ",            X$gamma,
-  #                      " nrounds = ",            X$nrounds
-  #       )
-  #       )
-  # 
-  #       model_metrics <- fit_and_evaluate_model(
-  #         folded_data_recipe_xgbmatrix = folded_data_recipe_xgbmatrix,
-  #         model_name = paste0(X$rownumber),
-  #         xgb_params = Y
-  #       )
-  #       
-  # 
-  #       
-  #       message(paste0("Model_name =", paste0(X$rownumber), " test_gini: ", model_metrics$test_gini, " test_rmse", model_metrics$test_rmse ))
-  #       return(model_metrics)})
-  #       )
-  #     
-  #   
-  # }
-  # 
-  # 
-  # tictoc::tic() #34s
-  # random_grid_results <- get_random_grid_results(list_of_param_sets)
-  # random_grid_results <- random_grid_results %>% mutate(test_rmse = map_dbl(booster, ~ .x$test_rmse), test_gini = map_dbl(booster, ~ .x$test_gini))
-  # tictoc::toc()
-  # write_rds(random_grid_results, paste0("output/", start_time, "_random_grid_results.rds"))
-  # 
-  # 
-  # # est-ce que je peux retrouver le gini avec les estimates? yes!
-  # #test_pour_gini <- bind_rows(folded_data$test)  %>% bind_cols(tibble(estimate = test$booster[[1]]$estimate[[1]])) 
-  # #MLmetrics::NormalizedGini(test_pour_gini$estimate, test_pour_gini$claim_amount)
-  # #0.3372843
-  # 
-  # best_xgb_params <- random_grid_results %>% arrange(-test_gini) %>% head(1) %>% pull(xgb_params) %>% .[[1]]
+  simon_params <- data.frame(
+    #booster = "gbtree",
+    #objective = "reg:tweedie",
+    #eval_metric = "rmse",
+    #tweedie_variance_power = 1.66,
+    gamma = 10,
+    max_depth = 3,
+    eta = 0.03,
+    min_child_weight = 25,
+    subsample = 0.6,
+    colsample_bytree = 0.3,
+    nrounds = 3000
+    #tree_method = tree_method
+  ) %>%
+    as_tibble()
+
+
+  # generate 20 random models parameter sets
+  how_many_models <- 4
+  set.seed(42)
+  gamma <-            data.frame(gamma =c(rep(0,how_many_models/4), runif(3*how_many_models/4)*10)) # 0 à 20
+  eta <-              data.frame(eta =c(rep(0.1,how_many_models))) # 0 à 10
+  nrounds <-              data.frame(nrounds =c(rep(3000,how_many_models))) # 0 à 10
+  max_depth <-        data.frame(max_depth = floor(runif(how_many_models)*11 ) + 3)  # 1 à 10
+  min_child_weight <- data.frame(min_child_weight = floor(runif(how_many_models) * 100) + 1) # 1 à 100
+  subsample <-        data.frame(subsample =runif(how_many_models) * 0.8 + 0.2) # 0.2 à 1
+  colsample_bytree <- data.frame(colsample_bytree =runif(how_many_models) * 0.8 + 0.2)  # 0.2 à 1
+  random_grid <-gamma %>%
+    bind_cols(eta ) %>%
+    bind_cols(nrounds ) %>%
+    bind_cols(max_depth ) %>%
+    bind_cols(min_child_weight) %>%
+    bind_cols(subsample) %>%
+    bind_cols(colsample_bytree )   %>%
+    as_tibble()
+  # combine random and hardcoded parameters
+  df.params <- simon_params %>%  bind_rows(random_grid) %>%
+    mutate(rownum = row_number(),
+           rownumber = row_number())
+  list_of_param_sets <- df.params %>%
+    group_nest(rownum)  %>%
+    mutate(xgb_params = map(data,
+                            ~  list(
+                              booster = "gbtree",
+                              eta = .x$eta,
+                              max_depth = .x$max_depth,
+                              min_child_weight = .x$min_child_weight,
+                              gamma = .x$gamma,
+                              subsample = .x$subsample,
+                              colsample_bytree = .x$colsample_bytree,
+                              objective = 'reg:tweedie',
+                              eval_metric = "rmse",
+                              tweedie_variance_power = 1.66,
+                              tree_method = tree_method
+                            )
+    )
+    )
+
+
+  # the get_random_grid_results tells us which parameter set has the best out-of-fold performance
+  get_random_grid_results <- function(list_of_param_sets){
+
+    random_grid_results <- list_of_param_sets %>%
+      mutate(booster = map2(data, xgb_params, function(X, Y){
+        message(paste0("model #",       X$rownumber,
+                       " eta = ",              X$eta,
+                       " max.depth = ",        X$max_depth,
+                       " min_child_weigth = ", X$min_child_weight,
+                       " subsample = ",        X$subsample,
+                       " colsample_bytree = ", X$colsample_bytree,
+                       " gamma = ",            X$gamma,
+                       " nrounds = ",            X$nrounds
+        )
+        )
+
+        model_metrics <- fit_and_evaluate_model(
+          folded_data_recipe_xgbmatrix = folded_data_recipe_xgbmatrix,
+          model_name = paste0(X$rownumber),
+          xgb_params = Y
+        )
+
+
+
+        message(paste0("Model_name =", paste0(X$rownumber), " test_gini: ", model_metrics$test_gini, " test_rmse", model_metrics$test_rmse ))
+        return(model_metrics)})
+        )
+
+
+  }
+
+
+  tictoc::tic() #34s
+  random_grid_results <- get_random_grid_results(list_of_param_sets)
+  random_grid_results <- random_grid_results %>% mutate(test_rmse = map_dbl(booster, ~ .x$test_rmse), test_gini = map_dbl(booster, ~ .x$test_gini))
+  tictoc::toc()
+  write_rds(random_grid_results, paste0("output/", start_time, "_random_grid_results.rds"))
+
+
+  # est-ce que je peux retrouver le gini avec les estimates? yes!
+  #test_pour_gini <- bind_rows(folded_data$test)  %>% bind_cols(tibble(estimate = test$booster[[1]]$estimate[[1]]))
+  #MLmetrics::NormalizedGini(test_pour_gini$estimate, test_pour_gini$claim_amount)
+  #0.3372843
+
+  best_xgb_params <- random_grid_results %>% arrange(-test_gini) %>% head(1) %>% pull(xgb_params) %>% .[[1]]
+  }
   # 
   # C - find the most promising parameters with bayesian search  -----
   # 
   # # objective function: we want to maximise the log likelihood by tuning most parameters
-  # obj.fun  <- smoof::makeSingleObjectiveFunction(
-  #   name = "xgb_cv_bayes",
-  #   fn =   function(x){
-  #     
-  #     xgb_params =  list(
-  #       booster          = "gbtree",
-  #       #eta              = x["eta"],
-  #       eta = 0.03, 
-  #       max_depth        = x["max_depth"],
-  #       min_child_weight = x["min_child_weight"],
-  #       gamma            = x["gamma"],
-  #       subsample        = x["subsample"],
-  #       colsample_bytree = x["colsample_bytree"],
-  #       objective = 'reg:tweedie', 
-  #       eval_metric = "rmse",
-  #       tree_method = tree_method
-  #     )
-  #     
-  #     model_metrics <- fit_and_evaluate_model(
-  #       folded_data_recipe_xgbmatrix = folded_data_recipe_xgbmatrix,
-  #       model_name = "default",
-  #       xgb_params = xgb_params,
-  #       max_rounds= max_xgbcv_rounds
-  #     )
-  #     
-  #     return(model_metrics$test_gini)
-  #   },
-  #   par.set = makeParamSet(
-  #     makeNumericParam("gamma",            lower = 0,     upper = 20),
-  #     makeIntegerParam("max_depth",        lower= 1,      upper = 8),
-  #     makeIntegerParam("min_child_weight", lower= 1,      upper = 100),
-  #     makeNumericParam("subsample",        lower = 0.1,   upper = 1),
-  #     makeNumericParam("colsample_bytree", lower = 0.1,   upper = 1)
-  #   ),
-  #   minimize = FALSE # on veut minimiser gini!
-  # )
-  # 
-  # # generate an optimal design with only 40  points
-  # 
-  # 
-  # set.seed(42)
-  # des = generateDesign(n= random_rounds,
-  #                      par.set = getParamSet(obj.fun), 
-  #                      fun = lhs::randomLHS) 
-  # 
-  # 
-  # simon_params <- data.frame(
-  #   gamma = 10,
-  #   max_depth = 3,
-  #   # eta = 0.03,
-  #   min_child_weight = 25,
-  #   subsample = 0.6,
-  #   colsample_bytree = 0.3
-  # ) %>%
-  #   as_tibble()
-  # 
-  # final_design = simon_params %>%
-  #   bind_rows(des)
-  # #final_design = des
-  # # bayes will have 40 additional iterations
-  # control = makeMBOControl()
-  # control = setMBOControlTermination(control, iters = bayesian_rounds)
-  # 
-  # run = mbo(fun = obj.fun, 
-  #           design = final_design,  
-  #           control = control, 
-  #           show.info = TRUE)
-  # write_rds( run, "output/run.rds")
-  # write_csv(run$opt.path$env$path,paste0( "output/", start_time, "_bayesian_run.csv"))
-  # run$opt.path$env$path  %>% 
-  #   mutate(Round = row_number()) %>%
-  #   mutate(type = case_when(
-  #     Round==1  ~ "1- hardcoded",
-  #     Round<= random_rounds + 1 ~ "2 -random rounds",
-  #     TRUE ~ "3 - bayesian rounds")) %>%
-  #   ggplot(aes(x= Round, y= y, color= type)) + 
-  #   geom_point() +
-  #   labs(title = "mlrMBO optimization")+
-  #   ylab("gini")
-  # 
-  # # max_depth =6 sinon ça pète avec gpu_hist https://discuss.xgboost.ai/t/when-using-xgb-cv-with-gpu-hist-check-failed-slice-only-supported-for-simpledmatrix-currently/1583/4
-  # 
-  # # gain de 0.0396 entre mes paramètres et les meilleures.. 
-  # # > run$opt.path$env$path
-  # # gamma max_depth min_child_weight subsample colsample_bytree        y
-  # # 1   10.000000000         3               25 0.6000000        0.3000000 711.9276
-  # 
-  # # > run$opt.path$env$path %>%  filter(y == min(y))
-  # # gamma max_depth min_child_weight subsample colsample_bytree       y
-  # # 1 15.5261         3               31 0.6317372         0.100022 711.888
-  # 
-  # 
-  # # ok on va devoir retourner chercher le nombre d'arbres maintenant.
-  # 
-  # bayesian_params <-  run$opt.path$env$path %>% arrange(desc(y)) %>% head(1)# on veut le plus gros gini!
-  # write_csv(bayesian_params, paste0("output/", start_time, "_bayesian_params.csv"))
-  # 
-  # best_xgb_params <- list(
-  #   booster = "gbtree",
-  #   objective = "reg:tweedie",
-  #   eval_metric = "rmse",
-  #   tweedie_variance_power = 1.66,
-  #   gamma = bayesian_params$gamma,
-  #   max_depth = bayesian_params$max_depth,
-  #   eta = 0.01, #best_params$eta, # learn slower for this model
-  #   min_child_weight = bayesian_params$min_child_weight,
-  #   subsample = bayesian_params$subsample,
-  #   colsample_bytree = bayesian_params$colsample_bytree,
-  #   tree_method = tree_method
-  # )
   
+  if(FALSE){
+  obj.fun  <- smoof::makeSingleObjectiveFunction(
+    name = "xgb_cv_bayes",
+    fn =   function(x){
+
+      xgb_params =  list(
+        booster          = "gbtree",
+        #eta              = x["eta"],
+        eta = 0.03,
+        max_depth        = x["max_depth"],
+        min_child_weight = x["min_child_weight"],
+        gamma            = x["gamma"],
+        subsample        = x["subsample"],
+        colsample_bytree = x["colsample_bytree"],
+        objective = 'reg:tweedie',
+        eval_metric = "rmse",
+        tree_method = tree_method
+      )
+
+      model_metrics <- fit_and_evaluate_model(
+        folded_data_recipe_xgbmatrix = folded_data_recipe_xgbmatrix,
+        model_name = "default",
+        xgb_params = xgb_params,
+        max_rounds= max_xgbcv_rounds,
+        do_folds = c(1,2)
+      )
+
+      return(model_metrics$test_gini)
+    },
+    par.set = makeParamSet(
+      makeNumericParam("gamma",            lower = 0,     upper = 20),
+      makeIntegerParam("max_depth",        lower= 1,      upper = 6),
+      makeIntegerParam("min_child_weight", lower= 1,      upper = 100),
+      makeNumericParam("subsample",        lower = 0.1,   upper = 0.8),
+      makeNumericParam("colsample_bytree", lower = 0.1,   upper = 0.8)
+    ),
+    minimize = FALSE # on veut minimiser gini!
+  )
+
+  # generate an optimal design with only 40  points
+
+
+  set.seed(42)
+  des = generateDesign(n= random_rounds,
+                       par.set = getParamSet(obj.fun),
+                       fun = lhs::randomLHS)
+
+
+  simon_params <- data.frame(
+    gamma = 10,
+    max_depth = 3,
+    # eta = 0.03,
+    min_child_weight = 25,
+    subsample = 0.6,
+    colsample_bytree = 0.3
+  ) %>%
+    as_tibble()
+
+  final_design = simon_params %>%
+    bind_rows(des)
+  #final_design = des
+  # bayes will have 40 additional iterations
+  control = makeMBOControl()
+  control = setMBOControlTermination(control, iters = bayesian_rounds)
+
+  run = mbo(fun = obj.fun,
+            design = final_design,
+            control = control,
+            show.info = TRUE)
+  write_rds( run, paste0("output/", start_time, "_run.rds"))
+  write_csv(run$opt.path$env$path,paste0( "output/", start_time, "_bayesian_run.csv"))
+  run$opt.path$env$path  %>%
+    mutate(Round = row_number()) %>%
+    mutate(type = case_when(
+      Round==1  ~ "1- hardcoded",
+      Round<= random_rounds + 1 ~ "2 -random rounds",
+      TRUE ~ "3 - bayesian rounds")) %>%
+    ggplot(aes(x= Round, y= y, color= type)) +
+    geom_point() +
+    labs(title = "mlrMBO optimization")+
+    ylab("gini")
+
+  # max_depth =6 sinon ça pète avec gpu_hist https://discuss.xgboost.ai/t/when-using-xgb-cv-with-gpu-hist-check-failed-slice-only-supported-for-simpledmatrix-currently/1583/4
+
+  # gain de 0.0396 entre mes paramètres et les meilleures..
+  # > run$opt.path$env$path
+  # gamma max_depth min_child_weight subsample colsample_bytree        y
+  # 1   10.000000000         3               25 0.6000000        0.3000000 711.9276
+
+  # > run$opt.path$env$path %>%  filter(y == min(y))
+  # gamma max_depth min_child_weight subsample colsample_bytree       y
+  # 1 15.5261         3               31 0.6317372         0.100022 711.888
+
+
+  # ok on va devoir retourner chercher le nombre d'arbres maintenant.
+
+  bayesian_params <-  run$opt.path$env$path %>% arrange(desc(y)) %>% head(1)# on veut le plus gros gini!
+  write_csv(bayesian_params, paste0("output/", start_time, "_bayesian_params.csv"))
+
+  best_xgb_params <- list(
+    booster = "gbtree",
+    objective = "reg:tweedie",
+    eval_metric = "rmse",
+    tweedie_variance_power = 1.66,
+    gamma = bayesian_params$gamma,
+    max_depth = bayesian_params$max_depth,
+    eta = 0.01, #best_params$eta, # learn slower for this model
+    min_child_weight = bayesian_params$min_child_weight,
+    subsample = bayesian_params$subsample,
+    colsample_bytree = bayesian_params$colsample_bytree,
+    tree_method = tree_method
+  )
+  }
   
   ## ok we decide that we like these xgb_params best.  Let's fit the most promising model once and for all
   # ----fit most promising model ----
@@ -456,8 +478,8 @@ fit_model <- function(x_raw= NULL,
   
   
   # calculate adjustment so that we submit an illegal model that loses money on the training set
-  preds <- predict(xgmodel, xgtrain)
-  claim_amount_backup <- training$claim_amount_backup
+  # preds <- predict(xgmodel, xgtrain)
+  # claim_amount_backup <- training$claim_amount_backup
   
   calibration_data <- training  %>% bind_cols(final_model_oof_preds) %>% 
     mutate(town_id = paste(population, 10*town_surface_area, sep = "_")) 
@@ -489,13 +511,99 @@ fit_model <- function(x_raw= NULL,
     }
   }
   
-  # cool lift
+  # cool lift charts
   p1 <-add_equal_weight_group(calibration_data, preds) %>% 
     group_by(groupe) %>%
-    summarise(preds =sum(preds), actual = sum(claim_amount)) %>%
+    summarise(preds =mean(preds), actual = mean(claim_amount)) %>%
     gather(key=key, value=value, -groupe) %>%
     ggplot(aes(x = groupe,y=value, color = key ))+ geom_point()
   
+  p2 <-  calibration_data %>% 
+    left_join(n_claim_year1_to_year3) %>%
+    filter(year == 4) %>% 
+    add_equal_weight_group(., preds) %>%
+    group_by(groupe, n_claims) %>%
+    summarise(preds =mean(preds), actual = mean(claim_amount)) %>%
+    gather(key=key, value=value, -groupe, -n_claims) %>%
+    ggplot(aes(x = groupe,y=value, color = key ))+ geom_point() + facet_wrap(~n_claims)
+  
+  
+  data_oof <- function(variable){
+    calibration_data %>% 
+      group_by({{variable}}) %>%
+      summarise(preds =mean(preds), 
+                actual = mean(claim_amount), 
+                n = n()
+      ) %>%
+      gather(key=key, value=value, -{{variable}}, -n) 
+    
+  }
+  
+  plot_oof <- function(variable){
+    data_oof({{variable}}) %>%
+      ggplot(aes(x = {{variable}},y=value, color = key ))+ geom_point(aes(size=n), alpha =0.6) +
+      theme_bw()
+  }
+  
+  data_oof2 <- function(variable){
+    baked_training %>% 
+      bind_cols(final_model_oof_preds) %>% 
+      group_by({{variable}}) %>%
+      summarise(preds =mean(preds), 
+                actual = mean(claim_amount), 
+                n = n()
+      ) %>%
+      gather(key=key, value=value, -{{variable}}, -n) 
+  }
+  plot_oof2 <- function(variable){
+    data_oof2({{variable}}) %>%
+      ggplot(aes(x = {{variable}},y=value, color = key ))+ geom_point(aes(size=n), alpha =0.6)  +
+      theme_bw() 
+  }
+  
+  plot_oof(drv_age1)
+  plot_oof(drv_sex1)
+  plot_oof(pol_coverage)
+  plot_oof(vh_fuel)
+  plot_oof(vh_age)
+  plot_oof(vh_type)
+  
+  plot_oof2(age_when_licensed)
+  plot_oof2(drv_sex1_M)
+  
+  plot_oof_continuous <- function(variable){
+    add_equal_weight_group(calibration_data, {{variable}} )%>% 
+      group_by(groupe) %>% 
+      summarise(preds =mean(preds), 
+                actual = mean(claim_amount), 
+                n = n()
+      ) %>%
+      gather(key=key, value=value, -groupe, -n) %>%
+      ggplot(aes(x= groupe, y = value, color = key))+ geom_point(aes(size=n), alpha =0.6)  +
+      theme_bw() 
+    
+  }
+  
+  
+  plot_oof_continuous2 <- function(variable){
+    add_equal_weight_group(baked_training %>% 
+                             bind_cols(final_model_oof_preds) , {{variable}} )%>% 
+      group_by(groupe) %>% 
+      summarise(preds =mean(preds), 
+                actual = mean(claim_amount), 
+                n = n()
+      ) %>%
+      gather(key=key, value=value, -groupe, -n) %>%
+      ggplot(aes(x= groupe, y = value, color = key))+ geom_point(aes(size=n), alpha =0.6)  +
+      theme_bw() 
+    
+  }
+  
+  
+  plot_oof_continuous(vh_value)
+  plot_oof_continuous2(vh_current_value)
+  
+    
   
   # 1 -adjustments on year 4 for good/bad drivers ----
   
@@ -512,23 +620,42 @@ fit_model <- function(x_raw= NULL,
   
   
   
+  # 0 ajust for age
+  ajust_age <-   calibration_data %>%
+    group_by(drv_age1) %>%
+    summarise(preds =sum(preds), actual = sum(claim_amount)) %>%
+    mutate(ajust_age = if_else(
+      drv_age1 < 25,  pmax(actual / preds,1),
+      1,
+      1
+      
+           )
+      )%>%
+    arrange(drv_age1) %>%
+    select(drv_age1, ajust_age)
   
-  # ahdjustment number of claims 
   
-  adjustments_for_n_claim <-   calibration_data %>% 
+  ajuste_pour_age <- 
+    calibration_data %>%
+    left_join(ajust_age) %>%
+    mutate(pred_age = preds * ajust_age)
+  
+  # 1ahdjustment number of claims 
+  
+  adjustments_for_n_claim <-   ajuste_pour_age %>% 
     left_join(n_claim_year1_to_year3) %>%
     filter(year == 4) %>% 
     group_by(n_claims) %>% 
-    summarise(across(c(claim_amount, claim_amount_backup, preds),sum)) %>%
-    mutate(ajust_n_claim = pmax(claim_amount / preds,1))  %>%
+    summarise(across(c(claim_amount, claim_amount_backup, preds, pred_age),sum)) %>%
+    mutate(ajust_n_claim = pmax(claim_amount / pred_age,1))  %>%
     #select(n_claims, ajust_n_claim) %>%
     bind_rows(tibble(n_claims=4, ajust_n_claim= 10000))
   
-  adjusted_for_clean_record <-   calibration_data %>% 
+  adjusted_for_clean_record <-   ajuste_pour_age %>% 
     left_join(n_claim_year1_to_year3) %>%
     filter(year == 4)  %>%
     left_join(adjustments_for_n_claim %>% select(n_claims, ajust_n_claim) ) %>%
-    mutate(preds_n_claim = preds * ajust_n_claim) 
+    mutate(preds_n_claim = pred_age * ajust_n_claim) 
   
   
   # ok on ne perds plus d'argent sur les sinistrés
@@ -536,6 +663,9 @@ fit_model <- function(x_raw= NULL,
     group_by(n_claims) %>% 
     summarise(across(c(claim_amount, claim_amount_backup, preds, preds_n_claim), sum)) %>%
     mutate(ratio = claim_amount  / preds_n_claim)
+  
+  
+  
   
   # 2adjust for bad car  ----
   adjust_for_car <-   adjusted_for_clean_record %>%
@@ -584,6 +714,7 @@ fit_model <- function(x_raw= NULL,
   write_rds(xgcv, paste0("output/final_model_", start_time, "xgcv.rds"))
   write_csv(n_claim_year1_to_year4 , paste0("output/final_model_", start_time, "_n_claim_year1_to_year4.csv"))
   write_csv(adjustments_for_n_claim, paste0("output/final_model_", start_time, "_adjustments_for_n_claim.csv"))
+  write_csv(ajust_age, paste0("output/final_model_", start_time, "_ajust_age.csv"))
   write_csv(adjust_for_car, paste0("output/final_model_", start_time, "_ajust_cars.csv"))
   write_csv(adjust_for_city, paste0("output/final_model_", start_time, "_ajust_city.csv"))
   write_csv(final_model_metrics, paste0("output/final_model_",start_time, "xgcv_metrics.csv"))
@@ -599,6 +730,7 @@ fit_model <- function(x_raw= NULL,
   # save to prod  ----
   xgb.save(xgmodel, fname=paste0("prod/trained_model.xgb"))
   write_rds(feature_names, "prod/feature_names.rds")
+  write_csv(ajust_age, paste0("prod/ajust_age.csv"))
   write_csv(n_claim_year1_to_year4, "prod/n_claim_year1_to_year4.csv")
   write_csv(adjustments_for_n_claim, "prod/adjustments_for_n_claim.csv")
   write_csv(adjust_for_car, "prod/ajust_cars.csv")

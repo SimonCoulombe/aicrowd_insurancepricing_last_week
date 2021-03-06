@@ -13,7 +13,7 @@ preprocess_X_data <- function(x_raw) {
   # YOUR CODE HERE ------------------------------------------------------
   recipe1 <- read_rds("prod/prepped_first_recipe.rds")
   df1 <- bake(recipe1, new_data = x_raw) %>%
-    bind_cols(x_raw %>% select(applied_car_ratio, applied_town_id_ratio, ajust_n_claim))
+    bind_cols(x_raw %>% select(applied_car_ratio, applied_town_id_ratio, ajust_n_claim, ajust_age))
   
   
 

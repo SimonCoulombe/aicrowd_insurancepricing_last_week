@@ -12,6 +12,7 @@ source("preprocess_X_data.R")
 
 model_output_path <- "prod/trained_model.xgb"
 feature_names <- read_rds("prod/feature_names.rds")
+ajust_age <- read_csv("prod/ajust_age.csv")
 ajust_cars <- read_csv("prod/ajust_cars.csv")
 ajust_city <- read_csv("prod/ajust_city.csv")
 ajust_n_claim <- read_csv("prod/adjustments_for_n_claim.csv")
@@ -41,14 +42,16 @@ if(!(interactive())){
 
 Xraw <- read_csv(input_dataset)  %>% 
    #select(-claim_amount) %>% 
+  #mutate(drv_age1 = 18) %>%
   #mutate(year=5)  %>% 
   #mutate(vh_make_model = "prout") %>%   #, population = 12, town_surface_area = 13) %>% 
+  left_join(ajust_age) %>% 
   left_join(n_claim_list) %>% 
   left_join(ajust_n_claim %>% select(n_claims, ajust_n_claim)) %>% 
   left_join(ajust_cars) %>%
   mutate(town_id = paste(population, 10*town_surface_area, sep = "_")) %>% 
   left_join(ajust_city) %>% # load the data
-  replace_na(list(applied_car_ratio = 1.5, applied_town_id_ratio = 1.5, ajust_n_claim = 1.25))
+  replace_na(list(ajust_age = 1, applied_car_ratio = 1.5, applied_town_id_ratio = 1.5, ajust_n_claim = 1.25))
 
 x_clean <- preprocess_X_data(Xraw) # clean the data
 trained_model <- load_model(model_output_path) # load the model
@@ -60,17 +63,18 @@ if (Sys.getenv("WEEKLY_EVALUATION", "false") == "true") {
   claims <- predict_expected_claim(trained_model, x_clean)
   write.table(x = claims, file = output_claims_file, row.names = FALSE, col.names = FALSE, sep = ",")
 }
-# 
-# test <- x_clean 
+# test <- x_clean
 # test$claim <- claims
 # test$prices <- prices
 # test <- test %>% mutate(ratio = claim / prices)
-# test %>% group_by(ajust_n_claim)   %>% summarise( across(c(claim, prices), sum)) %>% mutate(ratio = claim/prices)
-# test %>% 
-#   ggplot(aes(x= ratio))+ 
+#  test %>% group_by(ajust_n_claim)   %>% summarise( across(c(claim, prices), sum)) %>% mutate(ratio = claim/prices)
+#  
+#  test %>% group_by(drv_age1,ajust_n_claim)   %>% summarise( across(c(claim, prices), sum)) %>% mutate(ratio = claim/prices) %>% ggplot(aes(x=drv_age1, y = ratio))+ geom_point() + facet_wrap(~ajust_n_claim)
+# test %>%
+#   ggplot(aes(x= ratio))+
 #   geom_density()+
 #   facet_wrap(~ajust_n_claim, scales = "free")
 # 
 # 
-# test %>%   ggplot(aes(x= ratio))+ 
+# test %>%   ggplot(aes(x= ratio))+
 #   geom_density()
