@@ -40,7 +40,7 @@ if(!(interactive())){
 } else message("not interactive")
 
 Xraw <- read_csv(input_dataset)  %>% 
-   select(-claim_amount) %>% 
+   #select(-claim_amount) %>% 
   #mutate(year=5)  %>% 
   #mutate(vh_make_model = "prout") %>%   #, population = 12, town_surface_area = 13) %>% 
   left_join(n_claim_list) %>% 
