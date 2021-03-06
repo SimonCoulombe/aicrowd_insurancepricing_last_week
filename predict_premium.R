@@ -20,7 +20,8 @@ predict_premium <- function(model, x_raw) {
   # prices: a one-dimensional array of the same length as X_raw, with one
   #     price per contract (in same order). These prices must be POSITIVE (>0).
   predicted_claims <- predict_expected_claim(model, x_raw)
-  premiums <- predicted_claims *1.18  * x_raw$ajust_noclaim # * x_raw$applied_car_ratio* x_raw$applied_town_id_ratio
+  premiums <- predicted_claims * x_raw$ajust_n_claim * 1.19 * x_raw$applied_car_ratio  * x_raw$applied_town_id_ratio # 1.19
+  
   
   return(premiums)
 }

@@ -106,8 +106,8 @@ fit_model <- function(x_raw= NULL,
       step_rm(contains("id_policy")) %>% 
       #recipes::step_novel(all_nominal()) %>% 
       recipes::step_dummy(all_nominal(), one_hot = TRUE) 
-
-      
+    
+    
     
     prepped_first_recipe <- recipes::prep(my_first_recipe, .data, retain = FALSE)
     
@@ -500,53 +500,61 @@ fit_model <- function(x_raw= NULL,
   # 1 -adjustments on year 4 for good/bad drivers ----
   
   # find year4 with noclaim  
-    noclaim_year1_to_year3 <- training %>% 
+  n_claim_year1_to_year3 <- training %>% 
     filter(year <=3) %>% 
     group_by(id_policy) %>%
-    summarise(claims_year1_to_year3 = sum(claim_amount)) %>%
-    mutate(noclaim_year1_to_year3 = claims_year1_to_year3 == 0)
+    summarise(n_claims = sum(claim_amount>0))
   
-  noclaim_year1_to_year4 <- training %>% 
+  n_claim_year1_to_year4 <- training %>% 
     filter(year <=4) %>% 
     group_by(id_policy) %>%
-    summarise(claims_year1_to_year4 = sum(claim_amount)) %>%
-    mutate(noclaim_year1_to_year4 = claims_year1_to_year4 == 0)
+    summarise(n_claims = sum(claim_amount>0))
   
   
-  adjustments_for_noclaim <-   calibration_data %>% 
-    left_join(noclaim_year1_to_year3) %>%
+  
+  
+  # ahdjustment number of claims 
+  
+  adjustments_for_n_claim <-   calibration_data %>% 
+    left_join(n_claim_year1_to_year3) %>%
     filter(year == 4) %>% 
-    group_by(noclaim_year1_to_year3) %>% 
+    group_by(n_claims) %>% 
     summarise(across(c(claim_amount, claim_amount_backup, preds),sum)) %>%
-    mutate(ajust_noclaim = pmax(claim_amount / preds,1)) %>%
-    select(noclaim = noclaim_year1_to_year3, ajust_noclaim )
+    mutate(ajust_n_claim = pmax(claim_amount / preds,1))  %>%
+    #select(n_claims, ajust_n_claim) %>%
+    bind_rows(tibble(n_claims=4, ajust_n_claim= 10000))
   
   adjusted_for_clean_record <-   calibration_data %>% 
-    left_join(noclaim_year1_to_year3%>% rename(noclaim = noclaim_year1_to_year3)) %>%
+    left_join(n_claim_year1_to_year3) %>%
     filter(year == 4)  %>%
-    left_join(adjustments_for_noclaim ) %>%
-    mutate(preds_noclaim = preds * ajust_noclaim) 
+    left_join(adjustments_for_n_claim %>% select(n_claims, ajust_n_claim) ) %>%
+    mutate(preds_n_claim = preds * ajust_n_claim) 
   
+  
+  # ok on ne perds plus d'argent sur les sinistrés
   adjusted_for_clean_record %>%
-    summarise(across(c(claim_amount, claim_amount_backup, preds, preds_noclaim), sum))
+    group_by(n_claims) %>% 
+    summarise(across(c(claim_amount, claim_amount_backup, preds, preds_n_claim), sum)) %>%
+    mutate(ratio = claim_amount  / preds_n_claim)
+  
   # 2adjust for bad car  ----
-    adjust_for_car <-   adjusted_for_clean_record %>%
-      group_by(vh_make_model) %>%
-      summarise(preds =sum(preds_noclaim), actual = sum(claim_amount)) %>%
-        mutate(ratio = actual / preds,
-               applied_car_ratio = pmin(pmax(ratio, 1),1.5)
-        ) %>%
-        arrange(desc(applied_car_ratio)) %>%
+  adjust_for_car <-   adjusted_for_clean_record %>%
+    group_by(vh_make_model) %>%
+    summarise(preds =sum(preds_n_claim), actual = sum(claim_amount)) %>%
+    mutate(ratio = actual / preds,
+           applied_car_ratio = pmin(pmax(ratio, 1),1.5)
+    ) %>%
+    arrange(desc(applied_car_ratio)) %>%
     select(vh_make_model, applied_car_ratio)
-
+  
   adjusted_for_cars <-   adjusted_for_clean_record  %>%
-      left_join(adjust_for_car %>% select(vh_make_model, applied_car_ratio)) %>%
+    left_join(adjust_for_car %>% select(vh_make_model, applied_car_ratio)) %>%
     replace_na(list(applied_car_ratio = 1.5)) %>% # triple premium for unknown car
-    mutate(preds_adjusted_for_car = preds_noclaim * applied_car_ratio )
-
-
+    mutate(preds_adjusted_for_car = preds_n_claim * applied_car_ratio )
+  
+  
   adjusted_for_cars %>%
-    summarise(across(c(claim_amount, claim_amount_backup, preds, preds_noclaim, preds_adjusted_for_car), sum))
+    summarise(across(c(claim_amount, claim_amount_backup, preds, preds_n_claim, preds_adjusted_for_car), sum))
   # 3 adjust for bad city ----
   adjust_for_city <-   adjusted_for_cars %>%
     group_by(town_id) %>%
@@ -556,12 +564,12 @@ fit_model <- function(x_raw= NULL,
     ) %>%
     arrange(desc(applied_town_id_ratio)) %>%
     select(town_id, applied_town_id_ratio)
-
+  
   adjusted_for_cars_and_city <- adjusted_for_cars %>%
     left_join(adjust_for_city %>% select(town_id, applied_town_id_ratio)) %>%
     replace_na(list(applied_town_id_ratio = 1.5)) %>% # triple premium for unknown car
     mutate(preds_adjusted_for_car_town_id = preds_adjusted_for_car * applied_town_id_ratio )
-
+  
   
   
   
@@ -570,11 +578,12 @@ fit_model <- function(x_raw= NULL,
   # save a backup with start_time to make sure everything is safe.
   # save adjustments ----
   adjusted_for_cars_and_city %>%
-    summarise(across(c(claim_amount, claim_amount_backup, preds, preds_noclaim, preds_adjusted_for_car,preds_adjusted_for_car_town_id), sum)) %>%
+    summarise(across(c(claim_amount, claim_amount_backup, preds, preds_n_claim, preds_adjusted_for_car,preds_adjusted_for_car_town_id), sum)) %>%
     write_csv(.,paste0("output/final_model_", start_time, "_preds_after_ajust.csv") )
-
-  write_csv(noclaim_year1_to_year4 %>% select(id_policy, noclaim = noclaim_year1_to_year4), paste0("output/final_model_", start_time, "_noclaim_list.csv"))
-  write_csv(adjustments_for_noclaim, paste0("output/final_model_", start_time, "_ajust_noclaim.csv"))
+  
+  write_rds(xgcv, paste0("output/final_model_", start_time, "xgcv.rds"))
+  write_csv(n_claim_year1_to_year4 , paste0("output/final_model_", start_time, "_n_claim_year1_to_year4.csv"))
+  write_csv(adjustments_for_n_claim, paste0("output/final_model_", start_time, "_adjustments_for_n_claim.csv"))
   write_csv(adjust_for_car, paste0("output/final_model_", start_time, "_ajust_cars.csv"))
   write_csv(adjust_for_city, paste0("output/final_model_", start_time, "_ajust_city.csv"))
   write_csv(final_model_metrics, paste0("output/final_model_",start_time, "xgcv_metrics.csv"))
@@ -590,12 +599,12 @@ fit_model <- function(x_raw= NULL,
   # save to prod  ----
   xgb.save(xgmodel, fname=paste0("prod/trained_model.xgb"))
   write_rds(feature_names, "prod/feature_names.rds")
-  write_csv(noclaim_year1_to_year4 %>% select(id_policy, noclaim = noclaim_year1_to_year4), "prod/noclaim_list.csv")
-  write_csv(adjustments_for_noclaim, "prod/ajust_noclaim.csv")
+  write_csv(n_claim_year1_to_year4, "prod/n_claim_year1_to_year4.csv")
+  write_csv(adjustments_for_n_claim, "prod/adjustments_for_n_claim.csv")
   write_csv(adjust_for_car, "prod/ajust_cars.csv")
   write_csv(adjust_for_city, "prod/ajust_city.csv")
   write_rds(trained_recipe, "prod/prepped_first_recipe.rds")
-
+  
   
   return(list(xgmodel = xgmodel, ajusts = ajusts, trained_recipe = trained_recipe)) # return(trained_model)
   
