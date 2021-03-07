@@ -38,6 +38,59 @@ A couple “clever” things I did in that recipe:
 -   create “vh\_current”value", which is the value of the vehicle
     depreciated at a rate of 20% per year.
 
+``` r
+train_my_recipe <- function(.data) {
+  my_first_recipe <-
+    recipes::recipe(
+      claim_amount ~ .,
+      .data[0, ]
+    ) %>%
+    recipes::step_mutate(
+      light_slow = if_else(vh_weight < 400 & vh_speed < 130, 1, 0, NA_real_),
+      light_fast = if_else(vh_weight < 400 & vh_speed > 200, 1, 0, NA_real_),
+      town_id = paste(population, 10 * town_surface_area, sep = "_"),
+      age_when_licensed = drv_age1 - drv_age_lic1,
+      pop_density = population / town_surface_area,
+      young_man_drv1 = as.integer((drv_age1 <= 24 & drv_sex1 == "M")),
+      fast_young_man_drv1 = as.integer((drv_age1 <= 30 & drv_sex1 == "M" & vh_speed >= 200)),
+      young_man_drv2 = as.integer((drv_age2 <= 24 & drv_sex2 == "M")),
+      # no_known_claim_values = as.integer(pol_no_claims_discount %in% no_known_claim_values),
+      year = if_else(year <= 4, year, 4), # replace year 5 with a 4.
+      vh_current_value = vh_value * 0.8^(vh_age - 1), # depreciate 20% per year
+      vh_time_left = pmax(20 - vh_age, 0),
+      pol_coverage_int = case_when(
+        pol_coverage == "Min" ~ 1,
+        pol_coverage == "Med1" ~ 2,
+        pol_coverage == "Med2" ~ 3,
+        pol_coverage == "Max" ~ 4
+      ),
+      pol_pay_freq_int = case_when(
+        pol_pay_freq == "Monthly" ~ 1,
+        pol_pay_freq == "Quarterly" ~ 2,
+        pol_pay_freq == "Biannual" ~ 3,
+        pol_pay_freq == "Yearly" ~ 4
+      )
+    ) %>%
+    recipes::step_other(recipes::all_nominal(), threshold = 0.005) %>%
+    recipes::step_string2factor(recipes::all_nominal()) %>%
+    # 2 way interact
+    recipes::step_interact(~ pol_coverage_int:vh_current_value) %>%
+    recipes::step_interact(~ pol_coverage_int:vh_time_left) %>%
+    recipes::step_interact(~ pol_coverage_int:pol_no_claims_discount) %>%
+    recipes::step_interact(~ vh_current_value:vh_time_left) %>%
+    recipes::step_interact(~ vh_current_value:pol_no_claims_discount) %>%
+    recipes::step_interact(~ vh_time_left:pol_no_claims_discount) %>%
+    # 3 way intertac
+    recipes::step_interact(~ pol_coverage_int:vh_current_value:vh_age) %>%
+    # remove id
+    step_rm(contains("id_policy")) %>%
+    # recipes::step_novel(all_nominal()) %>%
+    recipes::step_dummy(all_nominal(), one_hot = TRUE)
+  prepped_first_recipe <- recipes::prep(my_first_recipe, .data, retain = FALSE)
+  return(prepped_first_recipe)
+}
+```
+
 For the hyperparameters, I did some random grids and even tried some
 bayesian search, but in the end I went with a set of parameters that
 “felt” right:
@@ -62,16 +115,27 @@ the other half, I used the same model, but I set a random profit margin
 between 1 and 100%. This is another “clever” thing I tried ;) To set a
 random profit margin, I looked at the first 2 decimals of the predicted
 claims (say 13 f the price was 92.13$) and decided that was the profit
-margin. The idea was to be able to tell what would be my market share at
-any profit margin using only a single week of data, but we were never
-provided enough weekly feedback to do this. Looking at the
-conversion\_rate and the average profit of the often/somtimes/never sold
-quotes, I have a feeling that around 20% was a good number. For example,
-if you look at my “financials by conversio nrate” table in the week 8
-feedback, then you see that the higher the profit margin, the less often
-I sell a quote (obviously). You also see that my highest profit per
-policy was for the policies sold “sometimes”, and the average profit
-margin for that group was 21%.
+margin. When setting the random prices, the idea was that I would
+inflate the prices using the determined profit margin, then set the
+decimals of the price to whatever the profit margin was so that I could
+calculate my profit and conversion rate by profit margin. The idea was
+to be able to tell what would be my market share at any profit margin
+using only a single week of data, but we were never provided enough
+weekly feedback to do this. Another “cunning plan” was to hide
+information from the weekly test in the decimals of the prices I charge.
+For example, a price of 109.23125 could have mean “23” percent profit
+margin, “1” means “man” and “25” means 25 year old. That cunning plan
+was also defeated since we were never given detailed enough information
+:)
+
+Looking at the conversion\_rate and the average profit of the
+often/sometimes/never sold quotes for the weeks using random profit
+margins, I have a feeling that around 20% was a good number. For
+example, if you look at my “financials by conversion rate” table in the
+week 8 feedback, then you see that the higher the profit margin, the
+less often I sell a quote (obviously). You also see that my highest
+profit per policy was for the policies sold “sometimes”, and the average
+profit margin for that group was 21%.
 
 Financials By Conversion Rate, week 8
 
