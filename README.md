@@ -1,28 +1,154 @@
 AICrowd insurance pricing competition last week submission
 ================
 Simon Coulombe
-Marc 6th 2021
+March 6th 2021
 
-# aicrowd\_insurancepricing\_starterpack
+    ## 
+    ## Attaching package: 'dplyr'
 
-A starterpack for the insurance pricing competition at
-<https://www.aicrowd.com/challenges/insurance-pricing-game>
+    ## The following objects are masked from 'package:stats':
+    ## 
+    ##     filter, lag
 
-It uses the {recipes} package to prepare the data, ensuring that you
-will always have the same features at the end.
+    ## The following objects are masked from 'package:base':
+    ## 
+    ##     intersect, setdiff, setequal, union
 
-I used a “tweedie” model, might be new for some folks. It allows you to
-model claim amount directly and is an alternative to using a frequency +
-a severity model
+This is the code I used to generate my submission for the last week of
+the AICrowd insurance pricing competition.
 
-I also used the “recipes” package, which insure that you won’t create
-extra dummy variables by mistake.
+My model is nothing fancy, but here is a quick look around it.
 
-I purposefully set the hyperparameters to something absolutely stupid. I
-also didnt do any clever feature engineering.
+It’s basically an xgboost using the “tweedie” objective function like I
+described ealier in my [starter
+pack](https://github.com/SimonCoulombe/aicrowd_insurancepricing_starterpack).
+I considered doing a “poisson x gamma” model, or even a “logistic x
+gamma” model, but I didnt have the time/will for that.
 
-TO USE: run fit\_model() on the training data to generate
-trained\_model.xgb, then zip the whole folder and upload as a submission
+I used “rmse” as the eval\_metric to decide when to stop churning out
+trees. I didnt check if using the loglikelihood was better.
+
+My recipe has a bit more meat than in the starterpack. See function
+train\_my\_recipe() in the [fit\_model.R
+file](https://github.com/SimonCoulombe/aicrowd_insurancepricing_last_week/blob/main/fit_model.R).  
+A couple “clever” things I did in that recipe:
+
+-   concatenate population and town\_surface\_area to create a unique
+    “town\_id”  
+-   create “vh\_current”value", which is the value of the vehicle
+    depreciated at a rate of 20% per year.
+
+For the hyperparameters, I did some random grids and even tried some
+bayesian search, but in the end I went with a set of parameters that
+“felt” right:
+
+    ## Rows: 1
+    ## Columns: 11
+    ## $ booster                <chr> "gbtree"
+    ## $ objective              <chr> "reg:tweedie"
+    ## $ eval_metric            <chr> "rmse"
+    ## $ tweedie_variance_power <dbl> 1.66
+    ## $ gamma                  <dbl> 4
+    ## $ max_depth              <dbl> 4
+    ## $ eta                    <dbl> 0.01
+    ## $ min_child_weight       <dbl> 10
+    ## $ subsample              <dbl> 0.6
+    ## $ colsample_bytree       <dbl> 0.4
+    ## $ tree_method            <chr> "hist"
+
+For the pricing, I tried a very basic approach of a 20% profit margin
+and a minimum price of 25$ for about half of the 10 practice weeks. For
+the other half, I used the same model, but I set a random profit margin
+between 1 and 100%. This is another “clever” thing I tried ;) To set a
+random profit margin, I looked at the first 2 decimals of the predicted
+claims (say 13 f the price was 92.13$) and decided that was the profit
+margin. The idea was to be able to tell what would be my market share at
+any profit margin using only a single week of data, but we were never
+provided enough weekly feedback to do this. Looking at the
+conversion\_rate and the average profit of the often/somtimes/never sold
+quotes, I have a feeling that around 20% was a good number. For example,
+if you look at my “financials by conversio nrate” table in the week 8
+feedback, then you see that the higher the profit margin, the less often
+I sell a quote (obviously). You also see that my highest profit per
+policy was for the policies sold “sometimes”, and the average profit
+margin for that group was 21%.
+
+Financials By Conversion Rate, week 8
+
+    ## # A tibble: 4 x 6
+    ##   `Policies won`      claim_frequency premiums conversion_rate `profit per poli…
+    ##   <chr>                         <dbl>    <dbl>           <dbl>             <dbl>
+    ## 1 often: 34.0 - 100.…            0.09     92.9            0.74            -24.2 
+    ## 2 sometimes: 1.4 - 3…            0.1     132.             0.11              1.9 
+    ## 3 rarely: 0.1 - 1.4%             0.1     143.             0.01              0.19
+    ## 4 never:                         0.11    221.             0                 0   
+    ## # … with 1 more variable: profit_margin <dbl>
+
+In the final weeks I tried a random profit margin between 20-45%, the
+idea being to try to get a few “very profitable policies” by trying to
+sell at 30+% profit margin, while also ensuring that I sell at least a
+few policies and remain on the leaderboard thanks to the 20-30% profit
+margin on half the quotes. That didnt work very well.
+
+My model has been profitable for the first half of the competition with
+a very small market share, until people caught on that you needed to
+have high profit margins.
+
+I’ve been meaning to do target encoding for “town\_id” and
+“vh\_make\_model” but never found the will/time to do it either. In the
+end, I stole an idea for glep’s playbook. For every vh\_make\_model, I
+looked if the claims were higher than the out of fold predicted claims.
+If it was, I increased the price for these cars. If it wasnt (I charged
+too much), I didnt give you a rebate. The idea here is that charging
+“too much” isnt a big problem, but charging “too little” is a big
+problem. The same approach is used for “town\_id” and for your number of
+claims. “Renewed policies” \[get charged more according to the number of
+claims they have made\] and if you have 4 claims in 4 years then I don’T
+want you: I multiply the price by 1000.
+
+For the hyperparameters, I also tried to do something “clever” and use
+100% of the training data as a test set.Here are the steps as seen in
+fit\_and\_evaluate\_model() : \* create 5 20% folds. \* do xgb.cv on
+combined data from fold A B C D to find optimal number of iterations \*
+train model on combined A B C D with optimal number of iterations \*
+predict on fold E. (the holdout folds) \* then repeat 4 more times,
+using the different folds as holdout. I don’t think it was worth it, and
+it meant runing everything 25 times for each set of hyperparameters. My
+next idea was to evaluate the performance on fold E for all
+hyperparameters, then estimate on fold A,B,C and D for the top 5
+hyperparameters sets to pick the best one. I didnt have the will to do
+it though.
+
+HEre are the links to my weekly feedbacks
+
+[week
+10](https://imperial-college-insurance-pricing-game.s3.eu-central-1.amazonaws.com/week-10/0f9f9bb8-cdd1-4bbc-bbcc-6a92fda83aa5.html)
+(20-45% profit margin)  
+[week
+9](https://imperial-college-insurance-pricing-game.s3.eu-central-1.amazonaws.com/week-9/aac0836d-c99d-462d-8da2-69c64237e604.html)
+(20-45% profit margin)  
+[week
+8](https://imperial-college-insurance-pricing-game.s3.eu-central-1.amazonaws.com/week-8/78813c62-115a-4c34-86cd-a7688b62c0a2.html)
+(1-100% profit margin)  
+[week
+7](https://imperial-college-insurance-pricing-game.s3.eu-central-1.amazonaws.com/week-7/34fc144a-ef88-40e3-885e-f6ec8d23359e.html)
+(20% profit margin)  
+[week
+6](https://imperial-college-insurance-pricing-game.s3.eu-central-1.amazonaws.com/week-6/20d6f746-98b3-4fd9-8d2e-8050784e5adc.html)
+(1-100% profit margin)  
+[week
+5](https://imperial-college-insurance-pricing-game.s3.eu-central-1.amazonaws.com/week-5/17190f91-87e3-4e42-bc9f-c5c73ed109f9.html)
+(20% profit margn)  
+[week
+4](https://imperial-college-insurance-pricing-game.s3.eu-central-1.amazonaws.com/week-4/f1f63a62-5573-4662-a57b-fc90751ec547.html)
+(20% profit)  
+[week
+3](https://imperial-college-insurance-pricing-game.s3.eu-central-1.amazonaws.com/week-3/4349b127-93f7-441f-aaca-956ab6283bed.html)  
+[week
+2](https://imperial-college-insurance-pricing-game.s3.eu-central-1.amazonaws.com/week-2/3ce37802-637c-4558-942c-311bd69dd7a1.html)  
+[week
+1](https://imperial-college-insurance-pricing-game.s3.eu-central-1.amazonaws.com/week-1/e2af6629-2ac6-44f8-87a6-6751d32d24a6.html)
+(20% profit)
 
 fit\_model() will search for the best hyperparameters by calling the
 fit\_and\_evaluate\_model() function for many model hyperparameters. the

@@ -22,7 +22,7 @@ predict_expected_claim <- function(model, x_raw) {
     as.matrix(x_raw %>% select(all_of(feature_names)))
   )
 
-  y_predict <- predict(model, newdata = xgmatrix) 
+  y_predict <- predict(model, newdata = xgmatrix)
 
   return(y_predict)
 }
