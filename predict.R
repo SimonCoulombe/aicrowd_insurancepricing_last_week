@@ -5,10 +5,11 @@ library(xgboost)
 #source("prep_recipe.R") # train wrangling recipes, only do onces
 #source("fit_model.R")  # train xgboost, only do once.
 #fit_model()
-source("load_model.R")
-source("predict_expected_claim.R")
-source("predict_premium.R")
-source("preprocess_X_data.R")
+walk(
+  list.files("R", full.names = TRUE, pattern = "*.R"),
+  source
+)
+
 
 model_output_path <- "prod/trained_model.xgb"
 feature_names <- read_rds("prod/feature_names.rds")
@@ -51,7 +52,7 @@ Xraw <- read_csv(input_dataset)  %>%
   left_join(ajust_cars) %>%
   mutate(town_id = paste(population, 10*town_surface_area, sep = "_")) %>% 
   left_join(ajust_city) %>% # load the data
-  replace_na(list(ajust_age = 1, applied_car_ratio = 1.5, applied_town_id_ratio = 1.5, ajust_n_claim = 1.25))
+  replace_na(list(ajust_age = 1, applied_car_ratio = 1.5, applied_town_id_ratio = 1.5, ajust_n_claim = 1.10)) #unknown car or town = +50%.  no history = +10%
 
 x_clean <- preprocess_X_data(Xraw) # clean the data
 trained_model <- load_model(model_output_path) # load the model
