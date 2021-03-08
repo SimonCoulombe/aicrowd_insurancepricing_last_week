@@ -69,6 +69,49 @@ train_my_recipe_xgb_kitchensink <- function(.data) {
   return(prepped_first_recipe)
 }
 
+train_my_recipe_xgb_no_step_interact <- function(.data) {
+  my_first_recipe <-
+    recipes::recipe(
+      claim_amount ~ .,
+      .data[0, ]
+    ) %>%
+    recipes::step_mutate(
+      light_slow = if_else(vh_weight < 400 & vh_speed < 130, 1, 0, NA_real_),
+      light_fast = if_else(vh_weight < 400 & vh_speed > 200, 1, 0, NA_real_),
+      town_id = paste(population, 10 * town_surface_area, sep = "_"),
+      age_when_licensed = drv_age1 - drv_age_lic1,
+      pop_density = population / town_surface_area,
+      young_man_drv1 = as.integer((drv_age1 <= 24 & drv_sex1 == "M")),
+      fast_young_man_drv1 = as.integer((drv_age1 <= 30 & drv_sex1 == "M" & vh_speed >= 200)),
+      young_man_drv2 = as.integer((drv_age2 <= 24 & drv_sex2 == "M")),
+      # no_known_claim_values = as.integer(pol_no_claims_discount %in% no_known_claim_values),
+      year = if_else(year <= 4, year, 4), # replace year 5 with a 4.
+      vh_current_value = vh_value * 0.8^(vh_age - 1), # depreciate 20% per year
+      vh_time_left = pmax(20 - vh_age, 0),
+      pol_coverage_int = case_when(
+        pol_coverage == "Min" ~ 1,
+        pol_coverage == "Med1" ~ 2,
+        pol_coverage == "Med2" ~ 3,
+        pol_coverage == "Max" ~ 4
+      ),
+      pol_pay_freq_int = case_when(
+        pol_pay_freq == "Monthly" ~ 1,
+        pol_pay_freq == "Quarterly" ~ 2,
+        pol_pay_freq == "Biannual" ~ 3,
+        pol_pay_freq == "Yearly" ~ 4
+      )
+    ) %>%
+    recipes::step_other(recipes::all_nominal(), threshold = 0.005) %>%
+    recipes::step_string2factor(recipes::all_nominal()) %>%
+
+    # remove id
+    step_rm(contains("id_policy")) %>%
+    # recipes::step_novel(all_nominal()) %>%
+    recipes::step_dummy(all_nominal(), one_hot = TRUE)
+  prepped_first_recipe <- recipes::prep(my_first_recipe, .data, retain = FALSE)
+  return(prepped_first_recipe)
+}
+
 #' fit_model train the insurance model(s)
 #'
 #' @param x_raw
@@ -105,43 +148,25 @@ fit_model <- function(x_raw = NULL,
   
   
   # set Hyperparameter -----
-  # Either A) hard code, B) randomgrid or C) bayesian search
-  # A - get model metrics manually
-  #
-  # model_metrics <- fit_and_evaluate_model(
-  #   folded_data_recipe_xgbmatrix = folded_data_recipe_xgbmatrix,
-  #   model_name = "default",
-  #   xgb_params = list(
-  #     booster = "gbtree",
-  #     objective = "reg:tweedie",
-  #     eval_metric = "rmse",
-  #     tweedie_variance_power = 1.5,
-  #     gamma = 0,
-  #     max_depth = 4,
-  #     eta = 0.1,
-  #     min_child_weight = 5,
-  #     subsample = 0.6,
-  #     colsample_bytree = 0.6,
-  #     tree_method = "hist")
-  # )
-  #
-  #
+  # Either A)  try a few hard coded values , B) randomgrid or C) bayesian search
+  
+  # best_xgb_param <- tuning_hardcoded()
+  # best_xgb_params <- tuning_randomgrid()
+  # best_xgb_params <- tuning_bayesian()
+  
   best_xgb_params <- list(
     booster = "gbtree",
     objective = "reg:tweedie",
     eval_metric = "rmse",
     tweedie_variance_power = 1.66,
-    gamma = 4,
-    max_depth = 4,
-    eta = 0.01,
-    min_child_weight = 10,
+    gamma = 10,
+    max_depth = 3,
+    eta = 0.005,
+    min_child_weight = 25,
     subsample = 0.6,
-    colsample_bytree = 0.4,
+    colsample_bytree = 0.3,
     tree_method = "hist"
-  )
-  # best_xgb_params <- tuning_randomgrid()
-  # best_xgb_params <- tuning_bayesian()
-  
+  ) 
   # ----fit most promising model ----
   trained_recipe <- train_my_recipe_xgb_kitchensink(training)
   
@@ -197,9 +222,13 @@ fit_model <- function(x_raw = NULL,
   ) %>%
     as_tibble()
   
-  calibration_data <- training %>%
-    left_join(final_model_oof_preds) %>%
-    mutate(town_id = paste(population, 10 * town_surface_area, sep = "_"))
+  
+  
+  final_model_preds <- training %>% 
+    select(id_policy, year) %>% 
+    bind_cols(tibble(preds = predict(xgmodel, xgtrain)))
+  
+  
   #
   # # cool lift charts
   # p1 <-add_equal_weight_group(calibration_data, preds) %>%
@@ -296,6 +325,10 @@ fit_model <- function(x_raw = NULL,
   #
   
   # Create adjustments for variables that the model doesnt use (or doesnt use well, like age) ----
+  calibration_data <- training %>%
+    left_join(final_model_preds) %>%
+    mutate(town_id = paste(population, 10 * town_surface_area, sep = "_"))
+  
   # ajustment for age
   ajust_age <- calibration_data %>%
     group_by(drv_age1) %>%

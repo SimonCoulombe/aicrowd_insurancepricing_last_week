@@ -10,58 +10,14 @@
 # repeat  4 more times, using the different folds as holdout.
 # don't think it was worth it.
 
+
+
+
 tuning_randomgrid <- function() {
   
   # We are going to set up a system that allows us to use 100% of the training set for training and testing.
   # This is important because we don'T have that much data, so keeping only 20% of that is likely to be volatile.
 
-  # assign all policies to a fold
-  folds <- create__group_folds(training, id_policy)
-
-  # create train and test set for all folds
-  folded_data <- tibble(folds %>% distinct(fold) %>% arrange(fold)) %>%
-    mutate(
-      train = map(fold, ~ training %>% inner_join(folds %>% filter(fold != .x))),
-      test = map(fold, ~ training %>% inner_join(folds %>% filter(fold == .x))),
-    )
-
-  # train recipe for all folds (some may have different dummies for models and cities than the others than the others.)
-  folded_data_recipe <-
-    folded_data %>%
-    mutate(
-      trained_recipe = map(train, ~ train_my_recipe_xgb_kitchensink(.x)),
-      baked_train = map2(train, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
-      baked_test = map2(test, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
-      feature_names = map(baked_train, ~ .x %>%
-                            select(-claim_amount, -year, -claim_amount_backup) %>%
-                            colnames()) # drop year
-    )
-
-  # create xgb matrix from baked data
-  folded_data_recipe_xgbmatrix <-
-    folded_data_recipe %>%
-    mutate(
-      xgtrain =
-        pmap(
-          list(baked_train, feature_names),
-          function(.data, .features) {
-            xgtrain <- xgb.DMatrix(
-              as.matrix(.data %>% select(all_of(.features))),
-              label = .data %>% pull(claim_amount)
-            )
-          }
-        ),
-      xgtest =
-        pmap(
-          list(baked_test, feature_names),
-          function(.data, .features) {
-            xgtrain <- xgb.DMatrix(
-              as.matrix(.data %>% select(all_of(.features))),
-              label = .data %>% pull(claim_amount)
-            )
-          }
-        )
-    )
   
   # # I love these parameters and I always want to have them around.
   simon_params <- data.frame(
@@ -82,7 +38,7 @@ tuning_randomgrid <- function() {
 
 
   # generate 20 random models parameter sets
-  how_many_models <- 20
+  how_many_models <- 8
   set.seed(42)
   gamma <- data.frame(gamma = c(rep(0, how_many_models / 4), runif(3 * how_many_models / 4) * 10)) # 0 à 20
   eta <- data.frame(eta = c(rep(0.05, how_many_models))) # 0 à 10
@@ -126,36 +82,10 @@ tuning_randomgrid <- function() {
     ))
 
 
-  # the get_random_grid_results tells us which parameter set has the best out-of-fold performance
-  get_random_grid_results <- function(list_of_param_sets) {
-    random_grid_results <- list_of_param_sets %>%
-      mutate(booster = map2(data, xgb_params, function(X, Y) {
-        message(paste0(
-          "model #", X$rownumber,
-          " eta = ", X$eta,
-          " max.depth = ", X$max_depth,
-          " min_child_weigth = ", X$min_child_weight,
-          " subsample = ", X$subsample,
-          " colsample_bytree = ", X$colsample_bytree,
-          " gamma = ", X$gamma,
-          " nrounds = ", X$nrounds
-        ))
-
-        model_metrics <- fit_and_evaluate_model(
-          folded_data_recipe_xgbmatrix = folded_data_recipe_xgbmatrix,
-          model_name = paste0(X$rownumber),
-          xgb_params = Y,
-          do_folds = c(1)
-        )
-
-        message(paste0("Model_name =", paste0(X$rownumber), " test_gini: ", model_metrics$test_gini, " test_rmse", model_metrics$test_rmse))
-        return(model_metrics)
-      }))
-  }
 
 
   tictoc::tic() # 34s
-  random_grid_results <- get_random_grid_results(list_of_param_sets)
+  random_grid_results <- evaluate_multiple_parameters(list_of_param_sets)
   random_grid_results <- random_grid_results %>% mutate(test_rmse = map_dbl(booster, ~ .x$test_rmse), test_gini = map_dbl(booster, ~ .x$test_gini))
   tictoc::toc()
   write_rds(random_grid_results, paste0("output/", start_time, "_random_grid_results.rds"))

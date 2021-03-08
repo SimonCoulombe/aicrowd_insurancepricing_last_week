@@ -47,8 +47,8 @@ Xraw <- read_csv(input_dataset) %>%
     ajust_age = 1, 
     applied_car_ratio = 1.5, 
     applied_town_id_ratio = 1.5, 
-    ajust_n_claim = 1.10)
-  ) # unknown car or town = +50%.  no history = +10%
+    ajust_n_claim = 1.05)
+  ) # unknown car or town = +50%.  no history = +5%
 
 x_clean <- preprocess_X_data(Xraw) # clean the data
 trained_model <- load_model(model_output_path) # load the model
