@@ -1,4 +1,58 @@
 tuning_bayesian <- function() {
+  
+  
+  # We are going to set up a system that allows us to use 100% of the training set for training and testing.
+  # This is important because we don'T have that much data, so keeping only 20% of that is likely to be volatile.
+  
+  # assign all policies to a fold
+  folds <- create__group_folds(training, id_policy)
+  
+  # create train and test set for all folds
+  folded_data <- tibble(folds %>% distinct(fold) %>% arrange(fold)) %>%
+    mutate(
+      train = map(fold, ~ training %>% inner_join(folds %>% filter(fold != .x))),
+      test = map(fold, ~ training %>% inner_join(folds %>% filter(fold == .x))),
+    )
+  
+  # train recipe for all folds (some may have different dummies for models and cities than the others than the others.)
+  folded_data_recipe <-
+    folded_data %>%
+    mutate(
+      trained_recipe = map(train, ~ train_my_recipe_xgb_kitchensink(.x)),
+      baked_train = map2(train, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
+      baked_test = map2(test, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
+      feature_names = map(baked_train, ~ .x %>%
+                            select(-claim_amount, -year, -claim_amount_backup) %>%
+                            colnames()) # drop year
+    )
+  
+  # create xgb matrix from baked data
+  folded_data_recipe_xgbmatrix <-
+    folded_data_recipe %>%
+    mutate(
+      xgtrain =
+        pmap(
+          list(baked_train, feature_names),
+          function(.data, .features) {
+            xgtrain <- xgb.DMatrix(
+              as.matrix(.data %>% select(all_of(.features))),
+              label = .data %>% pull(claim_amount)
+            )
+          }
+        ),
+      xgtest =
+        pmap(
+          list(baked_test, feature_names),
+          function(.data, .features) {
+            xgtrain <- xgb.DMatrix(
+              as.matrix(.data %>% select(all_of(.features))),
+              label = .data %>% pull(claim_amount)
+            )
+          }
+        )
+    )
+  
+  
   obj.fun <- smoof::makeSingleObjectiveFunction(
     name = "xgb_cv_bayes",
     fn = function(x) {

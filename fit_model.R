@@ -1,11 +1,11 @@
-# load libraries and functions -----
-library(tidyverse)
-library(tidymodels)
-library(xgboost)
-library(MLmetrics)
+# load libraries and functions ----- 
+library(tidyverse) # wrangling 
+library(tidymodels) # for recipes and yardstick::rmse_vec()
+library(xgboost) # 
+library(MLmetrics) # for normalized gini 
 library(mlrMBO) # for bayesian optimisation
-require("DiceKriging") # mlrmbo requires this
-require("rgenoud") # mlrmbo requires this
+require("DiceKriging") # mlrmbo requires this for bayesian optimisation
+require("rgenoud") # mlrmbo requires this for bayesian optimisation
 
 purrr::walk(
   list.files("R", full.names = TRUE, pattern = "*.R"),
@@ -18,16 +18,7 @@ bayesian_rounds <- 5
 max_xgbcv_rounds <- 2000
 tree_method <- "hist" # "gpu_hist
 
-# define new functions ----
-create__group_folds <- function(df, group_var = id_policy, n_folds = 5, seed = 42) {
-  set.seed(seed)
-  group_var_values <- df %>% 
-    distinct({{ group_var }}) # everyone has 4 records, always put someone's records in the same fold
-  folds <- group_var_values[sample(nrow(group_var_values)), ] %>% # randomize policynumber order, then assign  folds according to row number
-    mutate(fold = row_number() %% n_folds + 1)
-}
-
-train_my_recipe <- function(.data) {
+train_my_recipe_xgb_kitchensink <- function(.data) {
   my_first_recipe <-
     recipes::recipe(
       claim_amount ~ .,
@@ -78,42 +69,10 @@ train_my_recipe <- function(.data) {
   return(prepped_first_recipe)
 }
 
-add_equal_weight_group <- function(table, sort_by, expo = NULL, group_variable_name = "groupe", nb = 10) {
-  sort_by_var <- enquo(sort_by)
-  groupe_variable_name_var <- enquo(group_variable_name)
-  if (!(missing(expo))) { # https://stackoverflow.com/questions/48504942/testing-a-function-that-uses-enquo-for-a-null-parameter
-    expo_var <- enquo(expo)
-    total <- table %>%
-      pull(!!expo_var) %>%
-      sum()
-    br <- seq(0, total, length.out = nb + 1) %>%
-      head(-1) %>%
-      c(Inf) %>%
-      unique()
-    table %>%
-      arrange(!!sort_by_var) %>%
-      mutate(cumExpo = cumsum(!!expo_var)) %>%
-      mutate(!!group_variable_name := cut(cumExpo, breaks = br, ordered_result = TRUE, include.lowest = TRUE) %>% as.numeric()) %>%
-      select(-cumExpo)
-  } else {
-    total <- nrow(table)
-    br <- seq(0, total, length.out = nb + 1) %>%
-      head(-1) %>%
-      c(Inf) %>%
-      unique()
-    table %>%
-      arrange(!!sort_by_var) %>%
-      mutate(cumExpo = row_number()) %>%
-      mutate(!!group_variable_name := cut(cumExpo, breaks = br, ordered_result = TRUE, include.lowest = TRUE) %>% as.numeric()) %>%
-      select(-cumExpo)
-  }
-}
-
 #' fit_model train the insurance model(s)
 #'
 #' @param x_raw
 #' @param y_raw
-#' @param folds
 #'
 #' @return
 #' @export
@@ -143,56 +102,7 @@ fit_model <- function(x_raw = NULL,
       claim_amount_backup = claim_amount,
       claim_amount = pmin(claim_amount, 10000)
     ) # cap à 10 000$
-  # We are going to set up a system that allows us to use 100% of the training set for training and testing.
-  # This is important because we don'T have that much data, so keeping only 20% of that is likely to be volatile.
   
-  # assign all policies to a fold
-  folds <- create__group_folds(training, id_policy)
-  
-  # create train and test set for all folds
-  folded_data <- tibble(folds %>% distinct(fold) %>% arrange(fold)) %>%
-    mutate(
-      train = map(fold, ~ training %>% inner_join(folds %>% filter(fold != .x))),
-      test = map(fold, ~ training %>% inner_join(folds %>% filter(fold == .x))),
-    )
-  
-  # train recipe for all folds (some may have different dummies for models and cities than the others than the others.)
-  folded_data_recipe <-
-    folded_data %>%
-    mutate(
-      trained_recipe = map(train, ~ train_my_recipe(.x)),
-      baked_train = map2(train, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
-      baked_test = map2(test, trained_recipe, ~ recipes::bake(.y, new_data = .x)),
-      feature_names = map(baked_train, ~ .x %>%
-                            select(-claim_amount, -year, -claim_amount_backup) %>%
-                            colnames()) # drop year
-    )
-  
-  # create xgb matrix from baked data
-  folded_data_recipe_xgbmatrix <-
-    folded_data_recipe %>%
-    mutate(
-      xgtrain =
-        pmap(
-          list(baked_train, feature_names),
-          function(.data, .features) {
-            xgtrain <- xgb.DMatrix(
-              as.matrix(.data %>% select(all_of(.features))),
-              label = .data %>% pull(claim_amount)
-            )
-          }
-        ),
-      xgtest =
-        pmap(
-          list(baked_test, feature_names),
-          function(.data, .features) {
-            xgtrain <- xgb.DMatrix(
-              as.matrix(.data %>% select(all_of(.features))),
-              label = .data %>% pull(claim_amount)
-            )
-          }
-        )
-    )
   
   # set Hyperparameter -----
   # Either A) hard code, B) randomgrid or C) bayesian search
@@ -233,7 +143,7 @@ fit_model <- function(x_raw = NULL,
   # best_xgb_params <- tuning_bayesian()
   
   # ----fit most promising model ----
-  trained_recipe <- train_my_recipe(training)
+  trained_recipe <- train_my_recipe_xgb_kitchensink(training)
   
   baked_training <- bake(trained_recipe, new_data = training)
   
