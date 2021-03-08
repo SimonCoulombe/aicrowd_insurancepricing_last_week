@@ -159,16 +159,7 @@ a very small market share, until people caught on that you needed to
 have high profit margins.
 
 I’ve been meaning to do target encoding for “town\_id” and
-“vh\_make\_model” but never found the will/time to do it either. In the
-end, I stole an idea for glep’s playbook. For every vh\_make\_model, I
-looked if the claims were higher than the out of fold predicted claims.
-If it was, I increased the price for these cars. If it wasnt (I charged
-too much), I didnt give you a rebate. The idea here is that charging
-“too much” isnt a big problem, but charging “too little” is a big
-problem. The same approach is used for “town\_id” and for your number of
-claims. “Renewed policies” \[get charged more according to the number of
-claims they have made\] and if you have 4 claims in 4 years then I don’T
-want you: I multiply the price by 1000.
+“vh\_make\_model” but never found the will/time to do it either. 
 
 For the hyperparameters, I also tried to do something “clever” and use
 100% of the training data as a test set.Here are the steps as seen in
